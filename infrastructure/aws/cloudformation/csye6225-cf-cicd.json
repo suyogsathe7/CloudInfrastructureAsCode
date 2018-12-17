@@ -1,0 +1,202 @@
+{
+   "AWSTemplateFormatVersion": "2010-09-09",
+   "Parameters" : {
+   	"S3Bucket":{
+
+   		"Default": "csye6225-fall2018-fernandoi.me.csye6225.com",
+
+   		"Type": "String"
+   	}
+   },
+   "Resources": {
+   
+        "S3CodeBucket" : {
+            "Type" : "AWS::S3::Bucket",
+            "Properties" : {
+
+                "BucketName": {"Fn::Join": ["", ["code-deploy.", {"Ref": "S3Bucket" },".csye6225.com" ]] }
+                
+            }
+        },
+        
+        "S3LambdaBucket" : {
+            "Type" : "AWS::S3::Bucket",
+            "Properties" : {
+
+                "BucketName": {"Fn::Join": ["", ["lambda.", {"Ref": "S3Bucket" },".csye6225.com" ]] }
+                
+            }
+        },
+       
+
+   
+        "CodeDeployEC2ServiceRole": {
+         "Type": "AWS::IAM::Role",
+         "Properties": {
+         	"RoleName" : "CodeDeployEC2ServiceRole",
+            "AssumeRolePolicyDocument": {
+               "Version" : "2012-10-17",
+               "Statement": [ {
+                  "Effect": "Allow",
+                  "Principal": {
+                     "Service": [ "ec2.amazonaws.com" ]
+                  },
+                  "Action": [ "sts:AssumeRole" ]
+               } ]
+            },
+            "Path": "/",
+            "Policies": [ {
+               "PolicyName": "CodeDeploy-EC2-S3",
+               "PolicyDocument": {
+                  "Version" : "2012-10-17",
+                  "Statement": [ {
+                     "Effect": "Allow",
+                     "Action": ["s3:Get*", "s3:List*"],
+                     "Resource": {"Fn::Join" : ["",["arn:aws:s3:::", {"Ref" : "S3CodeBucket"}, "/*"]]}
+                  } ]
+               }
+               } ],
+            "ManagedPolicyArns": [
+                "arn:aws:iam::aws:policy/AmazonSNSFullAccess", "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy", 
+                "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+            ]
+            }
+      }, 
+      
+      "CodeDeployServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+      	"RoleName" : "CodeDeployServiceRole",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "codedeploy.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+        ]
+      }
+    },
+    
+      "TravisUploadToS3": {
+         "Type": "AWS::IAM::ManagedPolicy",
+         "Properties": {
+         	"ManagedPolicyName" : "Travis-Upload-To-S3",
+         	"Description" : "Upload to S3",
+            "PolicyDocument": {
+               "Version" : "2012-10-17",
+               "Statement": [ {
+                  "Effect": "Allow",
+                  "Action": "s3:Put*",
+                  "Resource": {"Fn::Join" : ["",["arn:aws:s3:::", {"Ref" : "S3CodeBucket"}, "/*"]]}
+               } ]
+            },
+            "Users" : ["travis"]
+         }
+      },
+      "TravisLambdaUploadToS3": {
+        "Type": "AWS::IAM::ManagedPolicy",
+        "Properties": {
+            "ManagedPolicyName" : "Travis-Lambda-Upload-To-S3",
+            "Description" : "Upload to S3",
+           "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [ {
+                 "Effect": "Allow",
+                 "Action": "s3:Put*",
+                 "Resource": {"Fn::Join" : ["",["arn:aws:s3:::", {"Ref" : "S3LambdaBucket"}, "/*"]]}
+              } ]
+           },
+           "Users" : ["travis"]
+        }
+     },
+    "TravisCodeDeploy": {
+         "Type": "AWS::IAM::ManagedPolicy",
+         "Properties": {
+         	"ManagedPolicyName" : "Travis-Code-Deploy",
+         	"Description" : "CodeDeploy to deploy to EC2",
+            "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "codedeploy:RegisterApplicationRevision",
+                        "codedeploy:GetApplicationRevision"
+                    ],
+                    "Resource": [
+                        "arn:aws:codedeploy:us-east-1:*:application:CODE_DEPLOY_APPLICATION_NAME"
+                    ]
+                },
+                {
+                "Effect": "Allow",
+                "Action": [
+                    "codedeploy:CreateDeployment",
+                    "codedeploy:GetDeployment"
+                ],
+                "Resource": [
+                    "*"
+                ]
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "codedeploy:GetDeploymentConfig"
+                    ],
+                    "Resource": [
+                        "arn:aws:codedeploy:us-east-1:*:deploymentconfig:CodeDeployDefault.OneAtATime",
+                        "arn:aws:codedeploy:us-east-1:*:deploymentconfig:CodeDeployDefault.HalfAtATime",
+                        "arn:aws:codedeploy:us-east-1:*:deploymentconfig:CodeDeployDefault.AllAtOnce"
+                    ]
+                }
+                ]
+            },
+            "Users" : ["travis"]
+        }
+    },
+    "CodeDeploylambdaS3":{
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "ManagedPolicyName": "CodeDeploy-lambda-S3",
+                "PolicyDocument": {
+                    "Version" : "2012-10-17",
+                    "Statement": [ {
+                        "Effect": "Allow",
+                        "Action": ["s3:Get*", "s3:List*"],
+                        "Resource": {"Fn::Join" : ["",["arn:aws:s3:::", {"Ref" : "S3LambdaBucket"}, "/*"]]}
+                    }]
+    
+                }
+    
+            }
+    },
+    
+    "ListS3BucketsInstanceProfile" : {
+            "Type" : "AWS::IAM::InstanceProfile",
+            "Properties" : {
+                "Path" : "/",
+                "Roles" : [
+                    {
+                        "Ref" : "CodeDeployEC2ServiceRole"
+                    }
+                ],
+                "InstanceProfileName": "ayyodevre"
+        }
+        }   
+    }  
+   
+}
+
+ 
+      

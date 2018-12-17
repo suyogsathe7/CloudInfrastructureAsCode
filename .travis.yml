@@ -1,0 +1,87 @@
+language: java
+jdk:
+  - oraclejdk8
+
+sudo: false
+
+install: true
+
+script:
+  - pwd
+  - cd webapp/Assignment_4
+  - ls -al 
+  - mvn clean install
+  - cd target
+  - ls -al
+  - cd ../../..
+  - pwd
+  - ls -al
+  - cd LambdaApp
+  - mvn package
+  - cd target
+  - ls -la
+  - cd ../../..
+  - pwd
+  - ls -la
+
+after_success:
+  - pwd
+  - ls -al
+  - mkdir codedeploy_artifact
+  - mkdir lambda_codedeploy_artifact
+  - cp csye6225-fall2018-lambda/infrastructure/aws/codedeploy/*.sh .
+  - cp csye6225-fall2018-lambda/*.yml .
+  - zip -r csye6225-web-app.zip csye6225-fall2018-lambda/webapp/Assignment_4/target/webapi_assignment3-0.0.1-SNAPSHOT.war *.sh *.yml
+  - ls -al
+  - mv csye6225-web-app.zip codedeploy_artifact/
+  - ls -al
+  - pwd
+  - cp csye6225-fall2018-lambda/LambdaApp/target/LambdaApp-2.2.jar lambda_codedeploy_artifact
+  - ls -al
+  - pwd
+  - cd codedeploy_artifact
+  - ls -al
+  - pwd
+  - cd ..
+  - pwd
+  - ls -al
+  - cd lambda_codedeploy_artifact
+  - ls -la
+  - pwd
+  - cd ..
+  - pwd
+deploy:
+  - provider: s3
+    local_dir: codedeploy_artifact
+    bucket: $s3_bucket
+    region: us-east-1
+    bundle_type: zip
+    skip_cleanup: true
+    access_key_id: $access_key_id
+    secret_access_key: $secret_access_key
+    on:
+      all_branches: true
+  - provider: s3
+    local_dir: lambda_codedeploy_artifact
+    bucket: $s3_bucket_lambda
+    region: us-east-1
+    key: LambdaApp-2.2.jar
+    bundle_type: jar
+    skip_cleanup: true
+    access_key_id: $access_key_id
+    secret_access_key: $secret_access_key
+    on:
+      all_branches: true
+  - provider: codedeploy
+    access_key_id: $access_key_id
+    bucket: $s3_bucket
+    key: csye6225-web-app.zip
+    bundle_type: zip
+    application: $application
+    deployment_group: $deployment_group
+    region: us-east-1
+    secret_access_key: $secret_access_key
+    wait-until-deployed: true
+    on:
+      all_branches: true
+

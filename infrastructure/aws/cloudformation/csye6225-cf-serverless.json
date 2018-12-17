@@ -1,0 +1,154 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+ 
+    "Parameters" : {
+         "myBucketName":{
+            "Default":"shunti.me",
+            "Description": "S3 bucket name",
+            "Type": "String"
+        },
+         "SNSNAME":{
+            "Default":"reset_password",
+            "Description": "SNS ARN for test",
+            "Type": "String"
+        
+        }
+
+
+    },
+     
+     "Mappings" : {
+         
+         "AWSRegionArch2AMI" : {
+             "us-east-1"      : { "HVM64" : "ami-9887c6e7"}        
+         }          
+     },
+ 
+    "Resources" : { 
+
+            
+        "myLambda": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn" : "lambdaIAMRole",
+            "Properties": {
+                "FunctionName":"myLambda",
+                "Handler" : "Email",
+                "Role": {"Fn::GetAtt" : ["lambdaIAMRole", "Arn"] },
+                "Code": {
+                    "S3Bucket": {"Fn::Join": ["", ["lambda.", {"Ref": "myBucketName" },".csye6225.com" ]]  },
+                    "S3Key": "LambdaApp-2.2.jar"
+                },
+                "Description" : "lambda to host webapp",
+                "Environment" : {"Variables": {"DOMAIN_NAME":{"Fn::Join":["",["https://www.csye6225-fall2018-",{"Ref": "myBucketName" } ]]}, "FROM_EMAIL":{"Fn::Join":["",["no-reply@test.csye6225-fall2018-",{"Ref": "myBucketName" } ]]}, "TABLENAME":"csye6225", "TTL":"5"} },
+                "Runtime": "java8",
+                "Timeout": 30,
+                "MemorySize":512
+            }
+        },
+         
+        "SNSTopic":{
+	    
+            "Type" : "AWS::SNS::Topic",
+            "DependsOn" : "myLambda",
+            "Properties" : {
+                "TopicName" : {"Ref":"SNSNAME"},
+                "Subscription":[{"Endpoint":{"Fn::GetAtt":[
+                    "myLambda","Arn"
+                ]},"Protocol":"lambda"
+                }],
+                "DisplayName":"Reset"
+            }
+
+        },
+
+        
+        "snsIAMRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName" : "snsIAMRole",
+                "AssumeRolePolicyDocument": {
+                    "Version" : "2012-10-17",
+                    "Statement": [ {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": [ "ssm.amazonaws.com" ]
+                        },  
+                        "Action": [ "sts:AssumeRole" ]
+                    } ]
+                },
+                "Path": "/",
+                "Policies": [ {
+                    "PolicyName": "snsFullAccess",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                        {
+                            "Action": ["sns:*"],
+                            "Effect": "Allow",
+                            "Resource": "*"
+                        }]
+                    }
+                }]
+            }
+        },
+
+        "LambdaResourcePolicy": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+              "FunctionName" : { "Ref" : "myLambda" },
+              "Principal": "sns.amazonaws.com",
+              "Action": "lambda:InvokeFunction",
+              "SourceArn" : { "Ref" : "SNSTopic" }
+            }
+          },
+          "lambdaExecutionPolicy":{
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "ManagedPolicyName": "LambdaExecutionPolicy",
+                "PolicyDocument": {
+                    "Version" : "2012-10-17",
+                    "Statement": [ {
+                        "Effect": "Allow",
+                        "Action": "logs:CreateLogGroup",
+                        "Resource": "arn:aws:logs:us-east-1:*"
+                    },
+                    {
+                       "Effect": "Allow",
+                       "Action": ["logs:CreateLogStream",
+                                       "logs:PutLogEvents"],
+                            "Resource": "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/myLambda:*"
+                        }
+                        ]
+                    }
+                                
+                }
+    },
+          "lambdaIAMRole": {
+                "Type": "AWS::IAM::Role",
+                "DependsOn" : "lambdaExecutionPolicy",
+                "Properties": {
+                    "RoleName" : "lambdaIAMRole",
+                    "AssumeRolePolicyDocument": {
+                        "Version" : "2012-10-17",
+                        "Statement": [ {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [ "lambda.amazonaws.com" ]
+                            },
+                            "Action": [ "sts:AssumeRole" ]
+                        } ]
+                    },
+                    "Path": "/",
+                    "ManagedPolicyArns": [
+                        {"Ref":"lambdaExecutionPolicy"},
+                        "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess", 
+                        "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+                    ]
+                    
+                }
+            }
+    
+    } 
+}
+ 
+ 
